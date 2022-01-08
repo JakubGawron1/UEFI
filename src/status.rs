@@ -1,4 +1,4 @@
-use core::ops::{ControlFlow, FromResidual, Try};
+use core::ops::Try;
 
 pub const ERROR_BIT: usize = 1 << 63;
 
@@ -93,7 +93,6 @@ pub type Result<T> = ::core::result::Result<T, Error>;
 
 #[derive(Copy, Clone, Debug, Eq, PartialEq)]
 #[must_use]
-#[repr(transparent)]
 pub struct Status(pub usize);
 
 impl Status {
@@ -103,30 +102,23 @@ impl Status {
 }
 
 impl Try for Status {
-    type Output = usize;
-    type Residual = Error;
+    type Ok = usize;
+    type Error = Error;
 
-    fn branch(self) -> ControlFlow<Self::Residual, Self::Output> {
+    fn into_result(self) -> Result<Self::Ok> {
         if self.0 & ERROR_BIT == 0 {
-            ControlFlow::Continue(self.0)
+            Ok(self.0)
         } else {
-            ControlFlow::Break(Error::from(self.0 & !ERROR_BIT))
+            Err(Error::from(self.0 & !(ERROR_BIT)))
         }
     }
 
-    fn from_output(v: Self::Output) -> Self {
-        Self(v & !ERROR_BIT)
+    fn from_error(v: Self::Error) -> Self {
+        Status(v as usize | ERROR_BIT)
+    }
+
+    fn from_ok(v: Self::Ok) -> Self {
+        Status(v & !(ERROR_BIT))
     }
 }
 
-impl FromResidual for Status {
-    fn from_residual(v: Error) -> Self {
-        Self(v as usize | ERROR_BIT)
-    }
-}
-
-impl<T> FromResidual<Error> for Result<T> {
-    fn from_residual(err: Error) -> Self {
-        Err(err)
-    }
-}
